@@ -24,7 +24,7 @@
 #define NRF_CE_PIN 9	//定义spi的Enable引脚,请根据具体连线修改。
 #define NRF_CS_PIN 10	//定义spi的Select引脚,请根据具体连线修改。
 #define TestLed 4	//定义测试用的Led连接引脚,请根据具体连线修改。
-#define NRF_Pairing_Pin 3 //定义nrf配对按钮中断管脚。
+#define NRF_Pairing_Pin 2 //定义nrf配对按钮中断管脚。
 NRF24E radio(NRF_CE_PIN, NRF_CS_PIN); //初始化NRF对象。
 
 
@@ -34,31 +34,25 @@ void NRF_Rx_interrupt(void *);		//定义收到接收中断时执行的函数
 void NRF_Tx_interrupt(void *);		//定义收到发送中断时执行的函数
 void NRF_Fail_interrupt(void *);	//定义收到错误中断时执行的函数(通常情况下不用管)
 
-
-uint8_t startPair=false;
-uint8_t coin=0;
 void setup()
 {
 
 
-/* add setup code here */
+    /* add setup code here */
     pinMode(NRF_Pairing_Pin, INPUT);
     pinMode(NRF_IRQ_Pin, INPUT);
-	pinMode(6,OUTPUT);
     pinMode(TestLed, OUTPUT);
     Serial.begin(9600);
     randomSeed(analogRead(0));		//初始化随机种子,请保留。
     printf_begin();
 
     printf("Beginning ... \n");
-    
-	
-printf("Initializing unique ID...\n");
+    printf("Initializing unique ID...\n");
 
     radio.LoadEEPROM();		    //从EEPROM中初始化NRF,请保留。
 
-    
-    	//启用NRF中断,请保留
+    attachInterrupt(INT0, Pin2_it, FALLING);
+    attachInterrupt(INT0, Pin3_it, FALLING);	//启用NRF中断,请保留
     radio.begin();
     radio.setPayloadSize(NRF_Payload_Length);
     //radio.QuickConfig();
@@ -69,15 +63,12 @@ printf("Initializing unique ID...\n");
     radio.StartListening();
     radio.TurnOffACKPayload();
     delay(1000);
-    
     //以上NRF设置均请保留。
     radio.rxInterruptFunction = NRF_Rx_interrupt;	//设定收到接收中断时执行的函数
 							//其他中断的设置同理,请参考NRF24E的头文件。
     radio.printDetails();	    //输出NRF配置状态,使用串口。
-	attachInterrupt(NRF_Pairing_Pin, Pin3_it, FALLING);//启用配对按钮中断
-	attachInterrupt(INT0, Pin2_it, FALLING);
 
-	//interrupts();
+
 
 
 
@@ -93,37 +84,8 @@ void loop()
     //if (GeneralStates==IDLING) Serial.println("Idle");
     //attachInterrupt(INT0,Pin2_it,FALLING);
     //detachInterrupt(INT1);
-if(digitalRead(NRF_Pairing_Pin)==0){
-delay(2000);
-if(digitalRead(NRF_Pairing_Pin)==0)
-{
-startPair=true;
-}
-else
-{
-printf("send a number!");
-uint8_t _a[2];
-if (coin==0){coin=1;_a[0]='0';}else{coin=0;_a[0]='1';}
-bool success=radio.Send((uint8_t*)_a,1);
 
-            if (success)
-            {
-                Serial.println("Success!");
-            }
 
-            else
-            {
-                Serial.println("Fail!");
-            }
-}
-}
-	if (startPair){
-
-printf("start pairing, button.");
-startPair=false;
-radio.StartPairing();
-
-}
     if(Serial.available() > 0)//以下串口轮询
     {
         char InChar = Serial.read();
@@ -163,20 +125,21 @@ radio.StartPairing();
 }
 
 
-void Pin2_it()//无线中断,请勿修改
+void Pin3_it()//无线中断,请勿修改
 
 {
     radio.InterruptService();
 }
-void Pin3_it()
+void Pin2_it()
 {
-	delay(5);
+	if (digitalRead(NRF_Pairing_Pin)!=0) return;
+	delay(10);
 	if (digitalRead(NRF_Pairing_Pin)==0)
 {
 	digitalWrite(TestLed, HIGH);
-	delay(1000);
+	delay(100);
 	digitalWrite(TestLed,LOW);
-	startPair=true;
+	radio.StartPairing();
 }
 }
 void NRF_Rx_interrupt(void *Npointer)
@@ -190,13 +153,11 @@ void NRF_Rx_interrupt(void *Npointer)
         if (Rx[0] == '1')
         {
             digitalWrite(TestLed, LOW);
-	    digitalWrite(6,HIGH);
         }
 
         else if(Rx[0] == '0')
         {
             digitalWrite(TestLed, HIGH);
-	    digitalWrite(6,LOW);
         }
 
 

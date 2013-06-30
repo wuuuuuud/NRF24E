@@ -37,28 +37,30 @@ void NRF_Fail_interrupt(void *);	//定义收到错误中断时执行的函数(�
 
 uint8_t startPair=false;
 uint8_t coin=0;
+uint8_t value5=0,value6=0,value7=0;
 void setup()
 {
 
-
-/* add setup code here */
+    /* add setup code here */
     pinMode(NRF_Pairing_Pin, INPUT);
     pinMode(NRF_IRQ_Pin, INPUT);
-	pinMode(6,OUTPUT);
     pinMode(TestLed, OUTPUT);
+    pinMode(5,INPUT);
+    pinMode(6,INPUT);
+    pinMode(7,INPUT);
     Serial.begin(9600);
     randomSeed(analogRead(0));		//初始化随机种子,请保留。
     printf_begin();
 
     printf("Beginning ... \n");
     
-	
+	delay(1000);
 printf("Initializing unique ID...\n");
 
     radio.LoadEEPROM();		    //从EEPROM中初始化NRF,请保留。
 
-    
-    	//启用NRF中断,请保留
+    attachInterrupt(NRF_Pairing_Pin, Pin3_it, FALLING);//启用配对按钮中断
+    attachInterrupt(INT0, Pin2_it, FALLING);	//启用NRF中断,请保留
     radio.begin();
     radio.setPayloadSize(NRF_Payload_Length);
     //radio.QuickConfig();
@@ -69,15 +71,12 @@ printf("Initializing unique ID...\n");
     radio.StartListening();
     radio.TurnOffACKPayload();
     delay(1000);
-    
     //以上NRF设置均请保留。
     radio.rxInterruptFunction = NRF_Rx_interrupt;	//设定收到接收中断时执行的函数
 							//其他中断的设置同理,请参考NRF24E的头文件。
     radio.printDetails();	    //输出NRF配置状态,使用串口。
-	attachInterrupt(NRF_Pairing_Pin, Pin3_it, FALLING);//启用配对按钮中断
-	attachInterrupt(INT0, Pin2_it, FALLING);
 
-	//interrupts();
+	interrupts();
 
 
 
@@ -93,6 +92,24 @@ void loop()
     //if (GeneralStates==IDLING) Serial.println("Idle");
     //attachInterrupt(INT0,Pin2_it,FALLING);
     //detachInterrupt(INT1);
+    value5=digitalRead(5);
+    value6=digitalRead(6);
+    value7=digitalRead(7);
+    if ((value5+value6+value7)==1)
+    {
+	digitalWrite(TestLed,0);
+	delay(20);
+    digitalWrite(TestLed,1);
+	delay(20);
+    digitalWrite(TestLed,0);
+	delay(20);
+    digitalWrite(TestLed,1);
+        radio.Send((uint8_t*)"1",1);
+    }
+    else
+    {
+	radio.Send((uint8_t*)"0",1);
+    }
 if(digitalRead(NRF_Pairing_Pin)==0){
 delay(2000);
 if(digitalRead(NRF_Pairing_Pin)==0)
@@ -190,13 +207,11 @@ void NRF_Rx_interrupt(void *Npointer)
         if (Rx[0] == '1')
         {
             digitalWrite(TestLed, LOW);
-	    digitalWrite(6,HIGH);
         }
 
         else if(Rx[0] == '0')
         {
             digitalWrite(TestLed, HIGH);
-	    digitalWrite(6,LOW);
         }
 
 

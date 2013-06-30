@@ -48,6 +48,7 @@ public:
 	 *_cspin:the pin number of the CSN pin
 	 */
 	NRF24E(uint8_t _cepin,uint8_t _cspin);
+	volatile uint8_t useSerial ;
 	volatile eventStates EventState ;
 	volatile uint8_t PairButtonState ;
 	volatile uint64_t LocalAddress;

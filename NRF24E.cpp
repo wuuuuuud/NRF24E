@@ -1,6 +1,7 @@
 #include "NRF24E.h"
 NRF24E::NRF24E(uint8_t _cepin,uint8_t _cspin):RF24(_cepin,_cspin)
 {
+    useSerial=0;
     pairingTimeStamp=0;
     randomSeed(analogRead(0));
 
@@ -10,9 +11,11 @@ NRF24E::NRF24E(uint8_t _cepin,uint8_t _cspin):RF24(_cepin,_cspin)
 generalStates NRF24E::LoadEEPROM(){
     if (EEPROM.read(ID_Existed_Address) == ID_Existed)
     {
-        Serial.println("The MCU has");
+        if (useSerial){
+            Serial.println("The MCU has");
         Serial.println(" got a supposed unique ID!");
         Serial.println("The ID is :");
+        }
         for (int i = 0; i <= ID_Length; i++)
         {
             Local_ID[i] = EEPROM.read(ID_Address + i);
@@ -22,8 +25,11 @@ generalStates NRF24E::LoadEEPROM(){
     }
     else
     {
-        Serial.println("The MCU doesn't have an unique ID!");
-        Serial.println("It will be assigned one");
+        if (useSerial)
+{
+	Serial.println("The MCU doesn't have an unique ID!");
+	        Serial.println("It will be assigned one");
+}
         char ID_String[ID_Length] = __TIMESTAMP__;
 
 
@@ -35,12 +41,18 @@ generalStates NRF24E::LoadEEPROM(){
 
         }
         EEPROM.write(ID_Existed_Address, ID_Existed);
-        Serial.println("The ID is assigned.");
+        if (useSerial)
+        {
+        	Serial.println("The ID is assigned.");
+        }
 
     }
     if (EEPROM.read(Local_Address_Existed_Address) == NRF_Address_Existed)
     {
-        Serial.println("Found a local address, will use it!");
+        if (useSerial)
+        {
+        	Serial.println("Found a local address, will use it!");
+        }
         for (int i = 0; i < NRF_Address_Length; i++)
         {
             LocalAddress <<= 8;
@@ -50,12 +62,12 @@ generalStates NRF24E::LoadEEPROM(){
     }
     else
     {
-        Serial.println("Failed to find a local address!");
+        if (useSerial) Serial.println("Failed to find a local address!");
         GeneralStates = IDLING;
     }
     if (EEPROM.read(Remote_Address_Existed_Address) == NRF_Address_Existed)
     {
-        Serial.println("Found a remote address, will use it!");
+        if (useSerial) Serial.println("Found a remote address, will use it!");
         for (int i = 0; i < NRF_Address_Length; i++)
         {
             RemoteAddress <<= 8;
@@ -65,12 +77,12 @@ generalStates NRF24E::LoadEEPROM(){
     }
     else
     {
-        Serial.println("Failed to find a remote address!");
+        if (useSerial) Serial.println("Failed to find a remote address!");
         GeneralStates = IDLING;
     }
     if (EEPROM.read(Remote_ID_Existed_Address) == ID_Existed)
     {
-        Serial.println("Found a remote ID, will use it!");
+        if (useSerial) Serial.println("Found a remote ID, will use it!");
         for (int i = 0; i < ID_Length; i++)
         {
             Remote_ID[i] = EEPROM.read(Remote_ID_Address + i);
@@ -78,7 +90,7 @@ generalStates NRF24E::LoadEEPROM(){
     }
     else
     {
-        Serial.println("Failed to find a remote ID!");
+        if (useSerial) Serial.println("Failed to find a remote ID!");
         GeneralStates = IDLING;
     }
     return GeneralStates;
@@ -102,8 +114,11 @@ void NRF24E::StartListening(){
     case WORKING:
         {
             setAutoAck(true);
+	    if (GeneralStates==WORKING) setAutoAck(0,false);
+	    
             openReadingPipe(0,bytes2int64((uint8_t*)NRF_Public_Address,NRF_Address_Length));
-            openReadingPipe(1,LocalAddress);
+            if (GeneralStates==WORKING) openReadingPipe(1,LocalAddress);
+	    //writeAckPayload(0,NRF_ACK_Normal,NRF_ACK_Length);//!//
             startListening();
             break;
         }
@@ -112,6 +127,7 @@ void NRF24E::StartListening(){
 
 uint8_t NRF24E::Send(uint8_t* data ,uint8_t len, uint8_t noListen){
     stopListening();
+    setAutoAck(true);
     switch (GeneralStates)
     {
     case WORKING:
@@ -148,8 +164,11 @@ generalStates NRF24E::EnterState(generalStates newState){
     case PAIRING_I_TX:
         {
             GeneralStates = PAIRING_I_TX;
-            Serial.println("Begin pairing process!");
-            Serial.println("Work as a transmitter");
+            if (useSerial)
+{
+	Serial.println("Begin pairing process!");
+	            Serial.println("Work as a transmitter");
+}
             int64Tobytes((uint8_t*)TX_buff, 2, NRF_CMD_Pair_I);
 
 
@@ -160,24 +179,27 @@ generalStates NRF24E::EnterState(generalStates newState){
             }
             if (LocalAddress % 2 != 0) LocalAddress -= 1; //ensure the last bit is zero;
             int64Tobytes((uint8_t*)Local_Address, NRF_Address_Length, LocalAddress);
-            Serial.println((char*)Local_Address);
+            if (useSerial) Serial.println((char*)Local_Address);
             EEPROMWrite(Local_Address_Address, (uint8_t*)Local_Address, NRF_Address_Length);
             EEPROM.write(Local_Address_Existed_Address, NRF_Address_Existed);
             int64Tobytes((uint8_t*)(TX_buff + 2), 5, LocalAddress);
-            Serial.println((const char*)TX_buff);
+            if (useSerial) Serial.println((const char*)TX_buff);
             memcpy((void*)(TX_buff + 7), (const void*)Local_ID, 25);
             //for (int i=0;i<=32;i++) Serial.println(TX_buff[i]);
-            Serial.println((char*)TX_buff);
+            if (useSerial) Serial.println((char*)TX_buff);
 
             bool success = Send((uint8_t*)TX_buff, NRF_Payload_Length,1);
 
             if (success)
             {
                 read(ACK_buff,NRF_ACK_Length);
-                Serial.println((char*)"Received Ack package:");
-                Serial.println((char*)ACK_buff);
-                Serial.println((char*)"Supposed Ack package:");
-                Serial.println((char*)NRF_ACK_Phase_I);
+                if (useSerial)
+ {
+	 Serial.println((char*)"Received Ack package:");
+	                Serial.println((char*)ACK_buff);
+	                Serial.println((char*)"Supposed Ack package:");
+	                Serial.println((char*)NRF_ACK_Phase_I);
+ }
                 if (memcmp(ACK_buff,NRF_ACK_Phase_I,2)==0)
                 {
 
@@ -186,7 +208,7 @@ generalStates NRF24E::EnterState(generalStates newState){
                     StartListening();
                     writeAckPayload(0,NRF_ACK_Phase_II,NRF_ACK_Length);
                     pairingTimeStamp=millis();
-                    Serial.println("transmitted successfully!");
+                    if (useSerial) Serial.println("transmitted successfully!");
                     return PAIRING_II_RX;
                 }
                 else
@@ -198,7 +220,7 @@ generalStates NRF24E::EnterState(generalStates newState){
             else
             {
 
-                Serial.println("?");
+                if (useSerial) Serial.println("?");
 
                 return EnterState(PAIRING_I_RX);
             }
@@ -207,7 +229,7 @@ generalStates NRF24E::EnterState(generalStates newState){
     case PAIRING_II_TX:
         {
             uint16_t cmd = bytes2int64((uint8_t*)RX_buff, 2);
-            Serial.println(cmd, 16);
+            if (useSerial) Serial.println(cmd, 16);
             if (cmd == NRF_CMD_Pair_I)
             {
                 /*
@@ -245,7 +267,7 @@ generalStates NRF24E::EnterState(generalStates newState){
                 int64Tobytes((uint8_t*)TX_buff + 2, NRF_Address_Length, LocalAddress);
                 int64Tobytes((uint8_t*)TX_buff, 2, NRF_CMD_Pair_II);
                 memcpy((void*)(TX_buff + 7), (const void *)Local_ID, ID_Length);
-                Serial.println((char*)TX_buff);
+                if (useSerial) Serial.println((char*)TX_buff);
                 delay(50);
 
                 uint8_t success=Send(TX_buff, NRF_Payload_Length,1);
@@ -253,11 +275,11 @@ generalStates NRF24E::EnterState(generalStates newState){
                 if (success)
                 {
                     read(ACK_buff,NRF_ACK_Length);
-                    Serial.println((char*)ACK_buff);
+                    if (useSerial) Serial.println((char*)ACK_buff);
                     if (memcmp(ACK_buff,NRF_ACK_Phase_II,2)==0)
                     {
                         StartListening();
-                        printDetails();
+                        if (useSerial) printDetails();
                         return WORKING;
                     }
                     else{
@@ -297,7 +319,7 @@ generalStates NRF24E::EnterState(generalStates newState){
                 }
                 EEPROM.write(Remote_ID_Existed_Address, ID_Existed);
                 StartListening();
-                printDetails();
+                if (useSerial) printDetails();
                 return WORKING;
 
             }
@@ -363,16 +385,16 @@ uint8_t NRF24E::StartPairing(){
         case NRF_Rx:
             {
                 EventState = Idle;
-                Serial.println("Receive something!");
+                if (useSerial) Serial.println("Receive something!");
                 //preprocess,extract data
                 read((uint8_t*)RX_buff, NRF_Payload_Length);
-                Serial.println((char*)RX_buff);
+                if (useSerial) Serial.println((char*)RX_buff);
                 //radio.startListening();
                 switch (GeneralStates)
                 {
                 case PAIRING_I_RX:
                     {
-                        Serial.println("IDLING!");
+                        if (useSerial) Serial.println("IDLING!");
 
                         GeneralStates = EnterState(PAIRING_II_TX);
                         break;
@@ -393,7 +415,7 @@ uint8_t NRF24E::StartPairing(){
         case NRF_Tx:
             {
                 EventState = Idle;
-                Serial.println("Sent something!");
+                if (useSerial) Serial.println("Sent something!");
                 break;
             }
         case Idle:
@@ -409,11 +431,11 @@ uint8_t NRF24E::StartPairing(){
                             if (coin)
                             {
                                 pairingTimeStamp = millis();
-                                Serial.println("continue waiting!");
+                                if (useSerial)  Serial.println("continue waiting!");
                             }
                             else
                             {
-                                Serial.println("go actively!");
+                                if (useSerial) Serial.println("go actively!");
                                 GeneralStates = EnterState(PAIRING_I_TX);
                             }
 
@@ -436,6 +458,7 @@ uint8_t NRF24E::StartPairing(){
         delay(5);
     }
     toggle_features();
+    //enableAckPayload();//!//
     StartListening();
 }
 
@@ -445,6 +468,15 @@ void NRF24E::InterruptService()
     this->whatHappened(tx, fail, rx);
     if (GeneralStates==WORKING)
     {
+        uint8_t sta=this->get_status();
+        if ((sta&0xE)==0) 
+        {
+            uint8_t Rx[NRF_Payload_Length + 1];
+            this->read(Rx, NRF_Payload_Length);
+            this->EventState=Idle;
+            return;
+        }
+
         if (rx)
         {
             this->EventState = NRF_Rx;

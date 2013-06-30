@@ -31,5 +31,9 @@
 
 #define NRF_ACK_Phase_I ("EF")  //check code for pairing phase I
 #define NRF_ACK_Phase_II ("B2") //check code for pairing phase II
+#define NRF_ACK_Normal ("V3") //normal ack payload
+#define NRF_ACK_Duplicated ("K4") //a third arduino receives a duplicated address
+				    //, it is not good
 #define NRF_ACK_Length (2)
+
 #endif
