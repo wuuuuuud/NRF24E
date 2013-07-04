@@ -15,6 +15,7 @@
 #define NRFModuleReceiver (true)
 #define NRFModuleTransmitter (false)
 #define NRFModuleTrigger ('1')
+#define outputTimeout (10000) //count in milli second
 uint8_t truthTable[16]={0,0,0,1,0,1,1,1,0,1,1,1,1,1,1,1};
 // CheckBox checkBox1 1
 // CheckBox checkBox2 1

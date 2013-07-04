@@ -1,16 +1,5 @@
 /*
-这是class的实例程序。
-本程序可以实现以下功能:
-1.连接串口,向A(rduino)发送'P'可令A进入配对模式,
-	A将试图与信号范围内另一个进入配对模式的A匹配。
-	在一定时间之后A会自动从配对模式退出。
-	该时间可以设置。
-2.向A发送'T'可以测试配对是否正常,如果正常会返回"Success"
-3.向A发送'S',A会返回NRF配置信息。
-4.向A发送其他内容,A会试图将接收到的内容通过NRF转发出去。
-5.如果A从无线接收到0/1,A会试图熄灭/点亮TestLed引脚上的Led。
-注意:
-请勿在中断中执行串口输出操作。
+latest by Wu Tao @ 20130704
 */
 
 #include <SPI.h>
@@ -52,15 +41,19 @@ volatile uint8_t NRFTriggered = false;
 //Here 0 means untriggered;
 volatile uint8_t portStatus[4] = {0, 0, 0, 0};
 //Trigger flag for all four ports.
+#if (outputEnable)
+volatile uint32_t outputActivatedTimestamp = 0;
+#endif
 uint8_t overAllTriggered = false;
 void setup()
 {
 
 
     /* add setup code here */
+	#if (NRFModuleEnable)
     pinMode(NRF_Pairing_Pin, INPUT);
-    pinMode(NRF_IRQ_Pin, INPUT);
-
+	pinMode(NRF_IRQ_Pin, INPUT);
+	#endif
     pinMode(TestLed, OUTPUT);
     if (inputAEnable) pinMode(inputA, INPUT);
     if (inputBEnable) pinMode(inputB, INPUT);
@@ -78,14 +71,10 @@ void setup()
 
 
 
-
+	#if (NRFModuleEnable)
     radio.LoadEEPROM();		    //从EEPROM中初始化NRF,请保留。
-
-
-    //启用NRF中断,请保留
-    radio.begin();
+	radio.begin();
     radio.setPayloadSize(NRF_Payload_Length);
-    //radio.QuickConfig();
     radio.setPALevel(RF24_PA_HIGH);
     radio.setChannel('X');
     radio.setDataRate(RF24_1MBPS);
@@ -100,9 +89,8 @@ void setup()
 
     attachInterrupt(NRF_Pairing_Pin, Pin3_it, FALLING);//启用配对按钮中断
     attachInterrupt(INT0, Pin2_it, FALLING);
-
-    //interrupts();
-
+	#endif
+    
 
 
 }
@@ -121,16 +109,18 @@ void loop()
     {
         delay(10);
         if (digitalRead(NRF_Pairing_Pin) == 1) return;
-        
+
         delay(1890);
         if(digitalRead(NRF_Pairing_Pin) == 0)
         {
             startPair = true;
-            ledCycle(3, 100);
+			//led 亮灭循环三次,进入配对模式。
+            ledCycle(3, 500);
         }
         else
         {
-            ledBlink(3, 25);
+            //led 闪烁三次,进入测试模式。
+			ledBlink(3, 25);
             uint8_t _a[2];
             if (coin == 0)
             {
@@ -143,11 +133,12 @@ void loop()
                 _a[0] = '1';
             }
             bool success = radio.Send((uint8_t*)_a, 1);
-            delay(200);
-            ledBlink(2, 25);
+            delay(100);
+			
             if (success)
             {
-                ledCycle(2,500);
+                //测试成功,led亮灭两次
+				ledCycle(2, 500);
 #ifdef UseSerial
                 Serial.println("Success!");
 #endif
@@ -155,7 +146,8 @@ void loop()
 
             else
             {
-                ledCycle(10,100);
+                //测试失败,led亮灭十次。
+				ledCycle(10, 100);
 #ifdef UseSerial
                 Serial.println("Fail!");
 #endif
@@ -172,13 +164,15 @@ void loop()
         radio.StartPairing();
         if (radio.CheckState() == WORKING)
         {
-            delay(1000);
+            delay(20);
+			//配对成功,led闪烁七次。
             ledBlink(7, 30);
 
         }
         else
         {
-            ledCycle(5, 500);
+            //配对超时,led亮灭5次。
+			ledCycle(5, 500);
         }
 
     }
@@ -205,55 +199,62 @@ void loop()
 
         overAllTriggered = truthTable[index];
 
-#if (outputEnable)
-#if(!NRFModuleReceiver )
-        if (overAllTriggered) digitalWrite(outputPort, outputActive);
 
-#endif
-#endif
 
 #if (NRFModuleTransmitter)
-	if(radio.CheckState()==WORKING)
-    {
-        if (overAllTriggered)
+        if(radio.CheckState() == WORKING)
         {
-            digitalWrite(TestLed,LOW);
-            radio.Send((uint8_t*)"1", 1);
-#ifdef UseSerial
-	    Serial.println("nrf signal sent!");
-	    delay(500);
-#endif
-        }
-        else 
-        {
-	    digitalWrite(TestLed,HIGH);
-	    radio.Send((uint8_t*)"0",1);
-#ifdef UseSerial
-	    Serial.println("nrf false signal sent!");
-	    delay(500);
-#endif
-        }
-
-    }
-#endif
-
-#if (NRFModuleReceiver && outputEnable)
-
-#if (UseSerial)
-	if (NRFTriggered) Serial.println("NRF triggered!");
-	if (overAllTriggered) Serial.println("overAllTriggeres!");
-#endif
-
-        if (NRFTriggered && overAllTriggered) 
+            if (overAllTriggered)
             {
-                digitalWrite(outputPort, outputActive);
+                digitalWrite(TestLed, LOW);
+                radio.Send((uint8_t*)"1", 1);
+#ifdef UseSerial
+                Serial.println("nrf signal sent!");
+                delay(500);
+#endif
+            }
+            else
+            {
+                digitalWrite(TestLed, HIGH);
+                radio.Send((uint8_t*)"0", 1);
+#ifdef UseSerial
+                Serial.println("nrf false signal sent!");
+                delay(500);
+#endif
+            }
+
+        }
+#endif
+
+#if (outputEnable)
 #if (UseSerial)
-		Serial.println("receive and triggered!");
+        if (NRFTriggered) Serial.println("NRF triggered!");
+        if (overAllTriggered) Serial.println("overAllTriggeres!");
+#endif
+
+        if (((NRFTriggered && NRFModuleReceiver)||(!NRFModuleReceiver)||(!NRFModuleEnable)) && overAllTriggered)
+        {
+            digitalWrite(outputPort, outputActive);
+            if (outputActivatedTimestamp == 0)
+            {
+                outputActivatedTimestamp = millis(); //timestamp in milliseconds
+            }
+            else if ((millis() - outputActivatedTimestamp) >= (outputTimeout>>1))
+            {
+                outputActivatedTimestamp = millis();
+            }
+#if (UseSerial)
+            Serial.println("receive and triggered!");
 #endif
         }
-	        else//go default
+        else//go default
         {
-	    digitalWrite(outputPort, 1-outputActive);
+            if ((millis() - outputActivatedTimestamp) >= outputTimeout)
+            {
+                digitalWrite(outputPort, 1 - outputActive);
+				outputActivatedTimestamp = 0;
+            }
+
         }
 #endif
 
@@ -295,7 +296,7 @@ void loop()
         }
     }
 #endif
-    delay(5+random()%10);
+    delay(10 + random(1000) % 10);
 
 }
 
@@ -308,13 +309,15 @@ void Pin2_it()//无线中断,请勿修改
 void Pin3_it()
 {
     delay(5);
-    if (digitalRead(NRF_Pairing_Pin) == 0)
+    /*
+	if (digitalRead(NRF_Pairing_Pin) == 0)
     {
         digitalWrite(TestLed, HIGH);
         delay(1000);
         digitalWrite(TestLed, LOW);
         startPair = true;
     }
+	*/
 }
 void NRF_Rx_interrupt(void *Npointer)
 {
